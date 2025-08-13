@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { OrdersService } from '../orders/orders.service';
 import { UserRole } from '../users/user.entity';
 import { Product } from '../products/product.entity';
+import { OrderStatus } from '../orders/order.entity';
 import { moneyFormat } from 'src/helper/string';
 
 interface AddProductSession {
@@ -59,6 +60,13 @@ export class TelegramService implements OnModuleInit {
     );
     this.bot.action('main_menu', (ctx) => this.sendMainMenu(ctx));
     this.bot.command('addproduct', (ctx) => this.handleAddProduct(ctx));
+    this.bot.command('manageorders', (ctx) => this.handleManageOrders(ctx));
+    this.bot.action(/^viewOrder_(\d+)$/, (ctx) => this.viewOrderDetails(ctx));
+    this.bot.action(/^updateOrderStatus_(\d+)_(.+)$/, (ctx) =>
+      this.updateOrderStatus(ctx),
+    );
+    this.bot.action('pending_orders', (ctx) => this.showPendingOrders(ctx));
+    this.bot.action('all_orders', (ctx) => this.showAllOrders(ctx));
     this.bot.on('text', (ctx) => this.handleTextMessage(ctx));
   }
 
@@ -339,5 +347,250 @@ export class TelegramService implements OnModuleInit {
     });
 
     await ctx.reply(ordersText, { parse_mode: 'Markdown' });
+  }
+
+  // Order Management for SuperAdmin
+  private async handleManageOrders(ctx: Context) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.reply("You don't have permission to do that.");
+      return;
+    }
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('📋 View Pending Orders', 'pending_orders')],
+      [Markup.button.callback('📊 View All Orders', 'all_orders')],
+      [Markup.button.callback('🏠 Back to Menu', 'main_menu')],
+    ]);
+
+    await ctx.reply('*Order Management Panel*\nChoose an option:', {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
+  }
+
+  private async showPendingOrders(ctx: Context) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.reply("You don't have permission to do that.");
+      return;
+    }
+
+    const pendingOrders = await this.ordersService.findPendingOrders();
+    if (pendingOrders.length === 0) {
+      await ctx.reply('No pending orders found.');
+      return;
+    }
+
+    let ordersText = '*📋 Pending Orders:*\n\n';
+    const buttons: any[] = [];
+
+    for (const order of pendingOrders) {
+      console.log({ pendingOrders: order });
+
+      ordersText += `Order #${order.id}\n`;
+      ordersText += `Customer: ${order.user.firstName} - ${order.user.lastName}\n`;
+      ordersText += `Total: ${moneyFormat(Number(order.total))}\n`;
+      ordersText += `Date: ${order.createdAt.toLocaleDateString()}\n\n`;
+
+      buttons.push([
+        Markup.button.callback(
+          `📝 View Order #${order.id}`,
+          `viewOrder_${order.id}`,
+        ),
+      ]);
+    }
+
+    buttons.push([Markup.button.callback('🏠 Back to Menu', 'main_menu')]);
+    const keyboard = Markup.inlineKeyboard(
+      buttons as Parameters<typeof Markup.inlineKeyboard>[0],
+    );
+
+    await ctx.reply(ordersText, { parse_mode: 'Markdown', ...keyboard });
+  }
+
+  private async showAllOrders(ctx: Context) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.reply("You don't have permission to do that.");
+      return;
+    }
+
+    const allOrders = await this.ordersService.findAll();
+    if (allOrders.length === 0) {
+      await ctx.reply('No orders found.');
+      return;
+    }
+
+    let ordersText = '*📊 All Orders:*\n\n';
+    const buttons: any[] = [];
+
+    // Show only first 10 orders
+    for (const order of allOrders.slice(0, 10)) {
+      ordersText += `Order #${order.id}\n`;
+      ordersText += `Customer: ${order.user.firstName}\n`;
+      ordersText += `Total: ${moneyFormat(Number(order.total))}\n`;
+      ordersText += `Status: ${order.status.toUpperCase()}\n`;
+      ordersText += `Date: ${order.createdAt.toLocaleDateString()}\n\n`;
+
+      buttons.push([
+        Markup.button.callback(
+          `📝 View Order #${order.id}`,
+          `viewOrder_${order.id}`,
+        ),
+      ]);
+    }
+
+    if (allOrders.length > 10) {
+      ordersText += `_... and ${allOrders.length - 10} more orders_\n\n`;
+    }
+
+    buttons.push([Markup.button.callback('🏠 Back to Menu', 'main_menu')]);
+    const keyboard = Markup.inlineKeyboard(
+      buttons as Parameters<typeof Markup.inlineKeyboard>[0],
+    );
+
+    await ctx.reply(ordersText, { parse_mode: 'Markdown', ...keyboard });
+  }
+
+  private async viewOrderDetails(ctx: Context) {
+    const callbackQuery = ctx.callbackQuery;
+    if (!callbackQuery || !('data' in callbackQuery)) return;
+
+    const callbackData = callbackQuery.data;
+    const match = callbackData.match(/^viewOrder_(\d+)$/);
+    if (!match) return;
+
+    const orderId = parseInt(match[1], 10);
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.answerCbQuery("You don't have permission to do that.");
+      return;
+    }
+
+    const order = await this.ordersService.findById(orderId);
+    if (!order) {
+      await ctx.answerCbQuery('Order not found');
+      return;
+    }
+
+    let orderText = `*📦 Order Details #${order.id}*\n\n`;
+    orderText += `👤 Customer: ${order.user.firstName}\n`;
+    orderText += `📱 Telegram: @${order.user.username || 'N/A'}\n`;
+    orderText += `📅 Date: ${order.createdAt.toLocaleDateString()}\n`;
+    orderText += `💰 Total: ${moneyFormat(Number(order.total))}\n`;
+    orderText += `📋 Status: ${order.status.toUpperCase()}\n\n`;
+    orderText += `*🛍️ Products:*\n`;
+
+    order.products.forEach((product, index) => {
+      orderText += `${index + 1}. ${product.name} - ${moneyFormat(+product.price)}\n`;
+    });
+
+    const statusButtons: any[] = [];
+
+    // Only show status change buttons if order is not delivered or canceled
+    if (
+      order.status !== OrderStatus.DELIVERED &&
+      order.status !== OrderStatus.CANCELED
+    ) {
+      if (order.status === OrderStatus.PENDING) {
+        statusButtons.push([
+          Markup.button.callback(
+            '✅ Mark as Paid',
+            `updateOrderStatus_${order.id}_paid`,
+          ),
+        ]);
+      }
+      if (order.status === OrderStatus.PAID) {
+        statusButtons.push([
+          Markup.button.callback(
+            '🚚 Mark as Shipped',
+            `updateOrderStatus_${order.id}_shipped`,
+          ),
+        ]);
+      }
+      if (order.status === OrderStatus.SHIPPED) {
+        statusButtons.push([
+          Markup.button.callback(
+            '📦 Mark as Delivered',
+            `updateOrderStatus_${order.id}_delivered`,
+          ),
+        ]);
+      }
+      statusButtons.push([
+        Markup.button.callback(
+          '❌ Cancel Order',
+          `updateOrderStatus_${order.id}_canceled`,
+        ),
+      ]);
+    }
+
+    statusButtons.push([
+      Markup.button.callback('📋 Back to Orders', 'pending_orders'),
+      Markup.button.callback('🏠 Main Menu', 'main_menu'),
+    ]);
+
+    const keyboard = Markup.inlineKeyboard(
+      statusButtons as Parameters<typeof Markup.inlineKeyboard>[0],
+    );
+    await ctx.reply(orderText, { parse_mode: 'Markdown', ...keyboard });
+  }
+
+  private async updateOrderStatus(ctx: Context) {
+    const callbackQuery = ctx.callbackQuery;
+    if (!callbackQuery || !('data' in callbackQuery)) return;
+
+    const callbackData = callbackQuery.data;
+    const match = callbackData.match(/^updateOrderStatus_(\d+)_(.+)$/);
+    if (!match) return;
+
+    const orderId = parseInt(match[1], 10);
+    const newStatus = match[2] as OrderStatus;
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.answerCbQuery("You don't have permission to do that.");
+      return;
+    }
+
+    const updatedOrder = await this.ordersService.updateOrderStatus(
+      orderId,
+      newStatus,
+    );
+    if (!updatedOrder) {
+      await ctx.answerCbQuery('Failed to update order');
+      return;
+    }
+
+    // Notify customer about status change
+    const customerTelegramId = updatedOrder.user.telegramId;
+    const statusMessage = `🔔 *Order Update*\n\nYour order #${updatedOrder.id} status has been updated to: *${newStatus.toUpperCase()}*\n\nTotal: ${moneyFormat(Number(updatedOrder.total))}`;
+
+    try {
+      await this.bot.telegram.sendMessage(customerTelegramId, statusMessage, {
+        parse_mode: 'Markdown',
+      });
+    } catch (error) {
+      console.log('Failed to notify customer:', error);
+    }
+
+    await ctx.answerCbQuery(`Order status updated to ${newStatus}`);
+
+    // Refresh the order details view
+    await this.viewOrderDetails(ctx);
   }
 }

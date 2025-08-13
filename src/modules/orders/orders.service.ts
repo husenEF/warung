@@ -43,4 +43,27 @@ export class OrdersService {
     });
     return order ?? undefined;
   }
+
+  async findAll(): Promise<Order[]> {
+    return this.ordersRepository.find({
+      relations: ['user', 'products'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findPendingOrders(): Promise<Order[]> {
+    return this.ordersRepository.find({
+      where: { status: OrderStatus.PENDING },
+      relations: ['user', 'products'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async updateOrderStatus(
+    orderId: number,
+    status: OrderStatus,
+  ): Promise<Order | undefined> {
+    await this.ordersRepository.update(orderId, { status });
+    return this.findById(orderId);
+  }
 }
