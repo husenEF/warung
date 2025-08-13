@@ -84,8 +84,10 @@ uploads/
 Dockerfile*
 docker-compose*.yml
 
-# Other
+# Other config files that aren't needed in production
 .prettierrc
 .eslintrc.js
-tsconfig*.json
-nest-cli.json
+
+# Keep build-related configs
+# tsconfig*.json - NEEDED for build
+# nest-cli.json - NEEDED for build

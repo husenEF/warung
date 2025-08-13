@@ -10,8 +10,8 @@ RUN apk add --no-cache python3 make g++
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including dev dependencies for build)
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -32,10 +32,14 @@ RUN apk add --no-cache dumb-init
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001
 
-# Copy built application and node_modules from base stage
+# Copy package files first
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy built application from base stage
 COPY --from=base --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=base --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=base --chown=nestjs:nodejs /app/package*.json ./
 
 # Switch to non-root user
 USER nestjs
