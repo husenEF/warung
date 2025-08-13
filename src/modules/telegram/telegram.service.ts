@@ -8,6 +8,7 @@ import { BankAccountsService } from '../bank-accounts/bank-accounts.service';
 import { UserRole } from '../users/user.entity';
 import { Product } from '../products/product.entity';
 import { OrderStatus } from '../orders/order.entity';
+import { CloudflareR2Service } from '../../utils/cloudflare-r2.service';
 import { moneyFormat } from 'src/helper/string';
 
 interface AddProductSession {
@@ -18,6 +19,7 @@ interface AddProductSession {
     price?: number;
     imageUrl?: string;
   };
+  waitingForPhoto?: boolean;
 }
 
 interface AddBankAccountSession {
@@ -49,6 +51,7 @@ export class TelegramService implements OnModuleInit {
     private readonly usersService: UsersService,
     private readonly ordersService: OrdersService,
     private readonly bankAccountsService: BankAccountsService,
+    private readonly r2Service: CloudflareR2Service,
   ) {}
 
   async onModuleInit() {
@@ -93,6 +96,7 @@ export class TelegramService implements OnModuleInit {
       this.deleteBankAccount(ctx),
     );
     this.bot.on('text', (ctx) => this.handleTextMessage(ctx));
+    this.bot.on('photo', (ctx) => this.handlePhotoMessage(ctx));
   }
 
   private async handleTextMessage(ctx: Context) {
@@ -143,7 +147,9 @@ export class TelegramService implements OnModuleInit {
         }
         session.product.price = price;
         session.step = 'imageUrl';
-        await ctx.reply('Please enter the product image URL.');
+        await ctx.reply(
+          'Please send a product image or enter an image URL.\n\n📸 You can:\n• Send a photo directly\n• Or type an image URL',
+        );
         break;
       }
       case 'imageUrl':
@@ -157,6 +163,63 @@ export class TelegramService implements OnModuleInit {
         this.addProductSessions.delete(chatId);
         await ctx.reply('Product added successfully!');
         break;
+    }
+  }
+
+  private async handlePhotoMessage(ctx: Context) {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+
+    const productSession = this.addProductSessions.get(chatId);
+    if (!productSession || productSession.step !== 'imageUrl') {
+      return;
+    }
+
+    try {
+      // Get the largest photo
+      const message = ctx.message as {
+        photo?: Array<{ file_id: string; file_size?: number }>;
+      };
+      const photos = message?.photo;
+      if (!photos || photos.length === 0) {
+        await ctx.reply('No photo found. Please try again.');
+        return;
+      }
+
+      const largestPhoto = photos[photos.length - 1];
+      const fileId = largestPhoto.file_id;
+
+      // Get file information from Telegram
+      const file = await ctx.telegram.getFile(fileId);
+      const fileUrl = `https://api.telegram.org/file/bot${this.configService.get('TELEGRAM_BOT_TOKEN')}/${file.file_path}`;
+
+      console.log({ fileUrl });
+
+      await ctx.reply('📸 Uploading your image to cloud storage...');
+
+      // Upload to Cloudflare R2
+      const uploadResult = await this.r2Service.uploadImageFromUrl(fileUrl);
+
+      // Create the product with R2 URL and key
+      await this.productsService.create({
+        name: productSession.product.name!,
+        description: productSession.product.description!,
+        price: productSession.product.price!,
+        imageUrl: uploadResult.publicUrl,
+        imageKey: uploadResult.key,
+        imagePath: file.file_path,
+      });
+
+      this.addProductSessions.delete(chatId);
+      await ctx.reply(
+        '✅ Product added successfully with your uploaded image!',
+      );
+      await this.sendMainMenu(ctx);
+    } catch (error) {
+      console.error('Error processing photo:', error);
+      await ctx.reply(
+        '❌ Failed to upload image to cloud storage. Please try sending the image again or use an image URL instead.',
+      );
     }
   }
 
@@ -245,10 +308,29 @@ export class TelegramService implements OnModuleInit {
       const keyboard = Markup.inlineKeyboard([
         Markup.button.callback('Add to Cart', `addToCart_${product.id}`),
       ]);
-      await ctx.replyWithPhoto(
-        { url: product.imageUrl },
-        { caption, parse_mode: 'Markdown', ...keyboard },
-      );
+
+      try {
+        if (product.imageUrl) {
+          // Use the image URL (either R2 public URL or external URL)
+          await ctx.replyWithPhoto(
+            { url: product.imageUrl },
+            { caption, parse_mode: 'Markdown', ...keyboard },
+          );
+        } else {
+          // Fallback: send text message without image
+          await ctx.reply(caption + '\n\n_No image available_', {
+            parse_mode: 'Markdown',
+            ...keyboard,
+          });
+        }
+      } catch (error) {
+        console.error('Error sending product image:', error);
+        // Fallback: send text message without image
+        await ctx.reply(caption + '\n\n_Image not available_', {
+          parse_mode: 'Markdown',
+          ...keyboard,
+        });
+      }
     }
   }
 

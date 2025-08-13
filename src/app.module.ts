@@ -8,6 +8,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { UsersModule } from './modules/users/users.module';
 import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module';
+import { StaticModule } from './modules/static/static.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module
     OrdersModule,
     UsersModule,
     BankAccountsModule,
+    StaticModule,
   ],
   controllers: [AppController],
   providers: [AppService],
