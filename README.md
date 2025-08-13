@@ -1,25 +1,211 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🏪 Warung Telegram Bot
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A modern e-commerce Telegram bot built with NestJS, featuring product catalog, shopping cart, order management, and cloud storage integration.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## ✨ Features
+
+- 🤖 **Telegram Bot Interface** - User-friendly bot interaction
+- 🛍️ **Product Management** - Add/view products with images
+- 🛒 **Shopping Cart** - Add/remove items, checkout functionality  
+- 📦 **Order Management** - Track orders, admin processing
+- 💳 **Payment Information** - Bank account management for payments
+- ☁️ **Cloud Storage** - Cloudflare R2 integration for images
+- 🔐 **User Roles** - Admin and customer role management
+- 📊 **Order Status Tracking** - Real-time order updates
+- 🚀 **Production Ready** - Docker deployment with Sevalla.com
+
+## 🛠️ Tech Stack
+
+- **Backend**: NestJS (Node.js)
+- **Database**: PostgreSQL
+- **Bot Framework**: Telegraf
+- **Storage**: Cloudflare R2
+- **Deployment**: Docker + Sevalla.com
+- **ORM**: TypeORM
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL
+- Telegram Bot Token
+- Cloudflare R2 Account (optional)
+
+### Local Development
+
+1. **Clone and Install**:
+   ```bash
+   git clone <repository-url>
+   cd warung_telegram
+   npm install
+   ```
+
+2. **Environment Setup**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Database Setup**:
+   ```bash
+   # Start PostgreSQL with Docker
+   docker-compose up postgres -d
+   
+   # Run migrations
+   npm run typeorm:migration:run
+   ```
+
+4. **Start Development**:
+   ```bash
+   npm run start:dev
+   ```
+
+## 🐳 Docker Deployment
+
+### Local Docker Testing
+
+```bash
+# Build and test locally
+npm run build
+docker build -t warung-telegram .
+docker-compose up
+```
+
+### Production Deployment on Sevalla.com
+
+1. **Prepare Environment**:
+   ```bash
+   # Create production .env file
+   cp .env.example .env
+   # Configure with production values
+   ```
+
+2. **Test Deployment**:
+   ```bash
+   chmod +x scripts/deploy.sh
+   ./scripts/deploy.sh
+   ```
+
+3. **Deploy to Sevalla**:
+   - Push code to Git repository
+   - Create new app on [Sevalla.com](https://sevalla.com)
+   - Connect your repository
+   - Configure environment variables
+   - Deploy!
+
+📖 **Detailed Instructions**: See [SEVALLA_DEPLOYMENT.md](./SEVALLA_DEPLOYMENT.md)
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+| Variable | Description | Required | Example |
+|----------|-------------|----------|---------|
+| `DATABASE_HOST` | PostgreSQL host | ✅ | `localhost` |
+| `DATABASE_USER` | Database username | ✅ | `user` |
+| `DATABASE_PASSWORD` | Database password | ✅ | `password` |
+| `DATABASE_NAME` | Database name | ✅ | `warung_telegram` |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | ✅ | `123456:ABC-DEF...` |
+| `R2_ENDPOINT` | Cloudflare R2 endpoint | ⚠️ | `https://account.r2.cloudflarestorage.com` |
+| `R2_ACCESS_KEY_ID` | R2 access key | ⚠️ | `your_access_key` |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key | ⚠️ | `your_secret_key` |
+| `R2_BUCKET_NAME` | R2 bucket name | ⚠️ | `warung-telegram` |
+| `R2_PUBLIC_URL` | Public URL for images | ⚠️ | `https://images.yourdomain.com` |
+
+⚠️ = Required for image upload functionality
+
+### Cloudflare R2 Setup
+
+For image storage functionality, set up Cloudflare R2:
+
+📖 **Setup Guide**: See [CLOUDFLARE_R2_SETUP.md](./CLOUDFLARE_R2_SETUP.md)
+
+## 🤖 Bot Commands
+
+### User Commands
+- `/start` - Start the bot and show main menu
+- `View Catalog` - Browse available products
+- `My Cart` - View and manage shopping cart
+- `My Orders` - View order history
+
+### Admin Commands
+- `/addproduct` - Add new product with image
+- `/manageorders` - View and process orders
+- `/bankaccounts` - Manage payment accounts
+
+## 📱 Features Overview
+
+### 🛍️ Shopping Experience
+- Browse product catalog with images
+- Add products to cart
+- Remove items from cart
+- Checkout with payment information
+- Order tracking and notifications
+
+### 👥 User Management
+- Automatic user registration
+- Role-based permissions (Admin/User)
+- Order history tracking
+
+### 📦 Order Management
+- Order status tracking (Pending → Paid → Shipped → Delivered)
+- Admin order processing panel
+- Customer notifications for status changes
+- Order details and product listings
+
+### 💳 Payment Integration
+- Bank account management
+- Payment information display during checkout
+- Active/inactive account management
+
+### ☁️ Cloud Storage
+- Automatic image upload to Cloudflare R2
+- Global CDN delivery
+- Cost-effective storage solution
+- Public URL generation
+
+## 🧪 Testing
+
+```bash
+# Unit tests
+npm run test
+
+# E2E tests
+npm run test:e2e
+
+# Test coverage
+npm run test:cov
+```
+
+## 📊 Project Structure
+
+```
+src/
+├── modules/
+│   ├── telegram/          # Bot logic and handlers
+│   ├── products/          # Product management
+│   ├── orders/            # Order processing
+│   ├── users/             # User management
+│   └── bank-accounts/     # Payment accounts
+├── utils/
+│   └── cloudflare-r2.service.ts  # R2 integration
+├── helper/
+│   └── string.ts          # Utility functions
+└── main.ts                # Application entry point
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+## 📄 License
+
+This project is [UNLICENSED](LICENSE).
 
 ## Description
 

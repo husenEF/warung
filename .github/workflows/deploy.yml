@@ -1,0 +1,114 @@
+name: Deploy to Sevalla
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: test_db
+
+      - name: Build application
+        run: npm run build
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: warung-telegram:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          docker run --rm -d --name test-container \
+            -e DATABASE_HOST=dummy \
+            -e DATABASE_USER=dummy \
+            -e DATABASE_PASSWORD=dummy \
+            -e DATABASE_NAME=dummy \
+            -e TELEGRAM_BOT_TOKEN=dummy \
+            -e R2_ENDPOINT=dummy \
+            -e R2_ACCESS_KEY_ID=dummy \
+            -e R2_SECRET_ACCESS_KEY=dummy \
+            -p 3000:3000 \
+            warung-telegram:latest
+
+          # Wait for container to start
+          sleep 10
+
+          # Check if container is running
+          if docker ps | grep -q test-container; then
+            echo "✅ Container started successfully"
+            docker stop test-container
+          else
+            echo "❌ Container failed to start"
+            docker logs test-container
+            exit 1
+          fi
+
+  notify:
+    needs: [test, build-and-push]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Notify deployment status
+        run: |
+          if [[ "${{ needs.test.result }}" == "success" && "${{ needs.build-and-push.result }}" == "success" ]]; then
+            echo "✅ All checks passed! Ready for deployment to Sevalla."
+          else
+            echo "❌ Some checks failed. Please review before deploying."
+          fi

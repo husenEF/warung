@@ -1,17 +1,56 @@
 version: '3.8'
+
 services:
+  # PostgreSQL Database
   postgres:
-    image: postgres:13
+    image: postgres:15-alpine
     container_name: warung_telegram_db
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: warung_telegram
+      POSTGRES_USER: ${DATABASE_USER:-user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-password}
+      POSTGRES_DB: ${DATABASE_NAME:-warung_telegram}
     ports:
-      - '5432:5432'
+      - '${DATABASE_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - warung_network
+
+  # Telegram Bot Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warung_telegram_app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${DATABASE_USER:-user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-password}
+      - DATABASE_NAME=${DATABASE_NAME:-warung_telegram}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - R2_ENDPOINT=${R2_ENDPOINT}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME:-warung-telegram}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
+    networks:
+      - warung_network
+    volumes:
+      # Only mount uploads if you need local file backup
+      - uploads_data:/app/uploads
+
+networks:
+  warung_network:
+    driver: bridge
 
 volumes:
   postgres_data:
+  uploads_data:
