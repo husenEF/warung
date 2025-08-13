@@ -13,4 +13,10 @@ export class BankAccount {
 
   @Column()
   accountHolderName: string;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt: Date;
 }

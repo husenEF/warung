@@ -34,4 +34,17 @@ export class BankAccountsService {
   async remove(id: number): Promise<void> {
     await this.bankAccountRepository.delete(id);
   }
+
+  async findActive(): Promise<BankAccount[]> {
+    return this.bankAccountRepository.find({ where: { isActive: true } });
+  }
+
+  async toggleActive(id: number): Promise<BankAccount | null> {
+    const bankAccount = await this.findOne(id);
+    if (!bankAccount) return null;
+
+    bankAccount.isActive = !bankAccount.isActive;
+    await this.bankAccountRepository.save(bankAccount);
+    return bankAccount;
+  }
 }

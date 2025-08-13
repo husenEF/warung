@@ -4,6 +4,7 @@ import { Telegraf, Context, Markup } from 'telegraf';
 import { ProductsService } from '../products/products.service';
 import { UsersService } from '../users/users.service';
 import { OrdersService } from '../orders/orders.service';
+import { BankAccountsService } from '../bank-accounts/bank-accounts.service';
 import { UserRole } from '../users/user.entity';
 import { Product } from '../products/product.entity';
 import { OrderStatus } from '../orders/order.entity';
@@ -19,6 +20,15 @@ interface AddProductSession {
   };
 }
 
+interface AddBankAccountSession {
+  step: 'bankName' | 'accountNumber' | 'accountHolderName';
+  bankAccount: {
+    bankName?: string;
+    accountNumber?: string;
+    accountHolderName?: string;
+  };
+}
+
 interface CartItem {
   productId: number;
   productName: string;
@@ -29,6 +39,8 @@ interface CartItem {
 export class TelegramService implements OnModuleInit {
   private bot: Telegraf<Context>;
   private addProductSessions: Map<number, AddProductSession> = new Map();
+  private addBankAccountSessions: Map<number, AddBankAccountSession> =
+    new Map();
   private carts: Map<number, CartItem[]> = new Map(); // userId -> cart items
 
   constructor(
@@ -36,6 +48,7 @@ export class TelegramService implements OnModuleInit {
     private readonly productsService: ProductsService,
     private readonly usersService: UsersService,
     private readonly ordersService: OrdersService,
+    private readonly bankAccountsService: BankAccountsService,
   ) {}
 
   async onModuleInit() {
@@ -61,31 +74,55 @@ export class TelegramService implements OnModuleInit {
     this.bot.action('main_menu', (ctx) => this.sendMainMenu(ctx));
     this.bot.command('addproduct', (ctx) => this.handleAddProduct(ctx));
     this.bot.command('manageorders', (ctx) => this.handleManageOrders(ctx));
+    this.bot.command('bankaccounts', (ctx) => this.handleBankAccounts(ctx));
+    this.bot.command('addbankaccount', (ctx) => this.handleAddBankAccount(ctx));
     this.bot.action(/^viewOrder_(\d+)$/, (ctx) => this.viewOrderDetails(ctx));
     this.bot.action(/^updateOrderStatus_(\d+)_(.+)$/, (ctx) =>
       this.updateOrderStatus(ctx),
     );
     this.bot.action('pending_orders', (ctx) => this.showPendingOrders(ctx));
     this.bot.action('all_orders', (ctx) => this.showAllOrders(ctx));
+    this.bot.action('view_bank_accounts', (ctx) => this.viewBankAccounts(ctx));
+    this.bot.action('add_bank_account', (ctx) =>
+      this.handleAddBankAccount(ctx),
+    );
+    this.bot.action(/^toggleBankAccount_(\d+)$/, (ctx) =>
+      this.toggleBankAccount(ctx),
+    );
+    this.bot.action(/^deleteBankAccount_(\d+)$/, (ctx) =>
+      this.deleteBankAccount(ctx),
+    );
     this.bot.on('text', (ctx) => this.handleTextMessage(ctx));
   }
 
   private async handleTextMessage(ctx: Context) {
-    console.log({ handleTextMessage: ctx.message });
-
     const chatId = ctx.chat?.id;
     if (!chatId) return;
-    const session = this.addProductSessions.get(chatId);
-    if (!session) {
+
+    // Check for add product session
+    const productSession = this.addProductSessions.get(chatId);
+    if (productSession) {
+      await this.handleAddProductText(ctx, productSession, chatId);
       return;
     }
 
+    // Check for add bank account session
+    const bankAccountSession = this.addBankAccountSessions.get(chatId);
+    if (bankAccountSession) {
+      await this.handleAddBankAccountText(ctx, bankAccountSession, chatId);
+      return;
+    }
+  }
+
+  private async handleAddProductText(
+    ctx: Context,
+    session: AddProductSession,
+    chatId: number,
+  ) {
     let text: string | undefined = '';
     if ('text' in (ctx.message ?? {})) {
       text = (ctx.message as { text: string }).text;
     }
-
-    console.log({ text });
 
     switch (session.step) {
       case 'name':
@@ -123,6 +160,41 @@ export class TelegramService implements OnModuleInit {
     }
   }
 
+  private async handleAddBankAccountText(
+    ctx: Context,
+    session: AddBankAccountSession,
+    chatId: number,
+  ) {
+    let text: string | undefined = '';
+    if ('text' in (ctx.message ?? {})) {
+      text = (ctx.message as { text: string }).text;
+    }
+
+    switch (session.step) {
+      case 'bankName':
+        session.bankAccount.bankName = text;
+        session.step = 'accountNumber';
+        await ctx.reply('Please enter the account number.');
+        break;
+      case 'accountNumber':
+        session.bankAccount.accountNumber = text;
+        session.step = 'accountHolderName';
+        await ctx.reply('Please enter the account holder name.');
+        break;
+      case 'accountHolderName':
+        session.bankAccount.accountHolderName = text;
+        await this.bankAccountsService.create({
+          bankName: session.bankAccount.bankName!,
+          accountNumber: session.bankAccount.accountNumber!,
+          accountHolderName: session.bankAccount.accountHolderName,
+        });
+        this.addBankAccountSessions.delete(chatId);
+        await ctx.reply('Bank account added successfully!');
+        await this.handleBankAccounts(ctx);
+        break;
+    }
+  }
+
   private async handleAddProduct(ctx: Context) {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
@@ -156,7 +228,6 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async sendCatalog(ctx: Context) {
-    console.log('Sending catalog...', ctx);
     const products = await this.productsService.findAll();
     if (products.length === 0) {
       await ctx.reply('Our catalog is empty at the moment.');
@@ -313,12 +384,29 @@ export class TelegramService implements OnModuleInit {
     // Create order
     const order = await this.ordersService.create(user, products);
 
+    // Get active bank accounts for payment information
+    const bankAccounts = await this.bankAccountsService.findActive();
+
     // Clear cart
     this.carts.delete(telegramId);
 
-    await ctx.reply(
-      `Order created successfully! 🎉\n\nOrder ID: ${order.id}\nTotal: $${order.total}\nStatus: ${order.status}`,
-    );
+    let orderMessage = `Order created successfully! 🎉\n\nOrder ID: ${order.id}\nTotal: ${moneyFormat(order.total)}\nStatus: ${order.status}`;
+
+    if (bankAccounts.length > 0) {
+      orderMessage +=
+        '\n\n💳 *Payment Information:*\nPlease transfer to one of the following accounts:\n\n';
+      bankAccounts.forEach((account, index) => {
+        orderMessage += `${index + 1}. *${account.bankName}*\n`;
+        orderMessage += `   Account: ${account.accountNumber}\n`;
+        orderMessage += `   Name: ${account.accountHolderName}\n\n`;
+      });
+      orderMessage +=
+        '_Please send payment confirmation to admin after transfer._';
+    } else {
+      orderMessage += '\n\n_Payment details will be provided by admin._';
+    }
+
+    await ctx.reply(orderMessage, { parse_mode: 'Markdown' });
     await this.sendMainMenu(ctx);
   }
 
@@ -392,8 +480,6 @@ export class TelegramService implements OnModuleInit {
     const buttons: any[] = [];
 
     for (const order of pendingOrders) {
-      console.log({ pendingOrders: order });
-
       ordersText += `Order #${order.id}\n`;
       ordersText += `Customer: ${order.user.firstName} - ${order.user.lastName}\n`;
       ordersText += `Total: ${moneyFormat(Number(order.total))}\n`;
@@ -585,12 +671,158 @@ export class TelegramService implements OnModuleInit {
         parse_mode: 'Markdown',
       });
     } catch (error) {
-      console.log('Failed to notify customer:', error);
+      console.error('Failed to notify customer:', error);
     }
 
     await ctx.answerCbQuery(`Order status updated to ${newStatus}`);
 
     // Refresh the order details view
     await this.viewOrderDetails(ctx);
+  }
+
+  // Bank Account Management for SuperAdmin
+  private async handleBankAccounts(ctx: Context) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.reply("You don't have permission to do that.");
+      return;
+    }
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('💳 View Bank Accounts', 'view_bank_accounts')],
+      [Markup.button.callback('➕ Add Bank Account', 'add_bank_account')],
+      [Markup.button.callback('🏠 Back to Menu', 'main_menu')],
+    ]);
+
+    await ctx.reply('*Bank Account Management*\nChoose an option:', {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
+  }
+
+  private async handleAddBankAccount(ctx: Context) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.reply("You don't have permission to do that.");
+      return;
+    }
+
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+
+    this.addBankAccountSessions.set(chatId, {
+      step: 'bankName',
+      bankAccount: {},
+    });
+
+    await ctx.reply('Please enter the bank name (e.g., BCA, Mandiri, BNI).');
+  }
+
+  private async viewBankAccounts(ctx: Context) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.reply("You don't have permission to do that.");
+      return;
+    }
+
+    const bankAccounts = await this.bankAccountsService.findAll();
+    if (bankAccounts.length === 0) {
+      await ctx.reply('No bank accounts found.');
+      return;
+    }
+
+    let accountsText = '*💳 Bank Accounts:*\n\n';
+    const buttons: any[] = [];
+
+    bankAccounts.forEach((account) => {
+      const status = account.isActive ? '✅ Active' : '❌ Inactive';
+      accountsText += `*${account.bankName}*\n`;
+      accountsText += `Account: ${account.accountNumber}\n`;
+      accountsText += `Name: ${account.accountHolderName}\n`;
+      accountsText += `Status: ${status}\n\n`;
+
+      buttons.push([
+        Markup.button.callback(
+          account.isActive
+            ? `❌ Deactivate ${account.bankName}`
+            : `✅ Activate ${account.bankName}`,
+          `toggleBankAccount_${account.id}`,
+        ),
+        Markup.button.callback(`🗑️ Delete`, `deleteBankAccount_${account.id}`),
+      ]);
+    });
+
+    buttons.push([Markup.button.callback('🏠 Back to Menu', 'main_menu')]);
+    const keyboard = Markup.inlineKeyboard(
+      buttons as Parameters<typeof Markup.inlineKeyboard>[0],
+    );
+
+    await ctx.reply(accountsText, { parse_mode: 'Markdown', ...keyboard });
+  }
+
+  private async toggleBankAccount(ctx: Context) {
+    const callbackQuery = ctx.callbackQuery;
+    if (!callbackQuery || !('data' in callbackQuery)) return;
+
+    const callbackData = callbackQuery.data;
+    const match = callbackData.match(/^toggleBankAccount_(\d+)$/);
+    if (!match) return;
+
+    const accountId = parseInt(match[1], 10);
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.answerCbQuery("You don't have permission to do that.");
+      return;
+    }
+
+    const updatedAccount =
+      await this.bankAccountsService.toggleActive(accountId);
+    if (!updatedAccount) {
+      await ctx.answerCbQuery('Bank account not found');
+      return;
+    }
+
+    const status = updatedAccount.isActive ? 'activated' : 'deactivated';
+    await ctx.answerCbQuery(`Bank account ${status}`);
+
+    // Refresh the bank accounts view
+    await this.viewBankAccounts(ctx);
+  }
+
+  private async deleteBankAccount(ctx: Context) {
+    const callbackQuery = ctx.callbackQuery;
+    if (!callbackQuery || !('data' in callbackQuery)) return;
+
+    const callbackData = callbackQuery.data;
+    const match = callbackData.match(/^deleteBankAccount_(\d+)$/);
+    if (!match) return;
+
+    const accountId = parseInt(match[1], 10);
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const user = await this.usersService.findByTelegramId(telegramId);
+    if (!user || user.role !== UserRole.ADMIN) {
+      await ctx.answerCbQuery("You don't have permission to do that.");
+      return;
+    }
+
+    await this.bankAccountsService.remove(accountId);
+    await ctx.answerCbQuery('Bank account deleted');
+
+    // Refresh the bank accounts view
+    await this.viewBankAccounts(ctx);
   }
 }
