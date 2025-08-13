@@ -9,7 +9,7 @@ import { UserRole } from '../users/user.entity';
 import { Product } from '../products/product.entity';
 import { OrderStatus } from '../orders/order.entity';
 import { CloudflareR2Service } from '../../utils/cloudflare-r2.service';
-import { moneyFormat } from 'src/helper/string';
+import { moneyFormat } from '../../helper/string';
 
 interface AddProductSession {
   step: 'name' | 'description' | 'price' | 'imageUrl';
