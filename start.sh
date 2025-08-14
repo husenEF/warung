@@ -63,4 +63,4 @@ echo "🔥 Starting production server..."
 echo "Press Ctrl+C to stop"
 echo ""
 
-exec npm run start:server
+exec npm start

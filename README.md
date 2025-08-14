@@ -12,7 +12,7 @@ A modern e-commerce Telegram bot built with NestJS, featuring product catalog, s
 - ☁️ **Cloud Storage** - Cloudflare R2 integration for images
 - 🔐 **User Roles** - Admin and customer role management
 - 📊 **Order Status Tracking** - Real-time order updates
-- 🚀 **Production Ready** - Docker deployment with Sevalla.com
+- 🚀 **Production Ready** - Direct deployment with PM2/systemd
 
 ## 🛠️ Tech Stack
 
@@ -20,8 +20,9 @@ A modern e-commerce Telegram bot built with NestJS, featuring product catalog, s
 - **Database**: PostgreSQL
 - **Bot Framework**: Telegraf
 - **Storage**: Cloudflare R2
-- **Deployment**: Docker + Sevalla.com
+- **Deployment**: Direct VPS/Cloud deployment
 - **ORM**: TypeORM
+- **Process Manager**: PM2 / systemd
 
 ## 🚀 Quick Start
 
@@ -49,11 +50,12 @@ A modern e-commerce Telegram bot built with NestJS, featuring product catalog, s
 
 3. **Database Setup**:
    ```bash
-   # Start PostgreSQL with Docker
-   docker-compose up postgres -d
+   # Install and start PostgreSQL
+   sudo apt install postgresql postgresql-contrib
+   sudo systemctl start postgresql
    
-   # Run migrations
-   npm run typeorm:migration:run
+   # Create database and user (see DEPLOYMENT.md for details)
+   sudo -u postgres createdb warung_telegram
    ```
 
 4. **Start Development**:
@@ -61,40 +63,52 @@ A modern e-commerce Telegram bot built with NestJS, featuring product catalog, s
    npm run start:dev
    ```
 
-## 🐳 Docker Deployment
+## � Production Deployment
 
-### Local Docker Testing
+### Direct Server Deployment
 
 ```bash
-# Build and test locally
+# Build the application
 npm run build
-docker build -t warung-telegram .
-docker-compose up
+
+# Start with production server
+npm start
+
+# Or use the startup script
+./start.sh
+
+# Or use PM2 for process management
+pm2 start ecosystem.config.js
 ```
 
-### Production Deployment on Sevalla.com
+### VPS/Cloud Server Setup
 
 1. **Prepare Environment**:
    ```bash
-   # Create production .env file
+   # Copy and configure environment
    cp .env.example .env
-   # Configure with production values
+   # Edit .env with your production values
    ```
 
-2. **Test Deployment**:
+2. **Install Dependencies**:
    ```bash
-   chmod +x scripts/deploy.sh
-   ./scripts/deploy.sh
+   npm install
+   npm run build
    ```
 
-3. **Deploy to Sevalla**:
-   - Push code to Git repository
-   - Create new app on [Sevalla.com](https://sevalla.com)
-   - Connect your repository
-   - Configure environment variables
-   - Deploy!
+3. **Start Production Server**:
+   ```bash
+   # Using production server wrapper
+   npm start
+   
+   # Using PM2 process manager
+   pm2 start ecosystem.config.js
+   
+   # Using startup script
+   ./start.sh
+   ```
 
-📖 **Detailed Instructions**: See [SEVALLA_DEPLOYMENT.md](./SEVALLA_DEPLOYMENT.md)
+📖 **Detailed Instructions**: See [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ## ⚙️ Configuration
 
