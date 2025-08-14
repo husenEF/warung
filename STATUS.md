@@ -1,16 +1,12 @@
-# 🎉 Warung Telegram Bot - Deployment Ready!
+# 🎉 Warung Telegram Bot - Production Ready!
 
 ## ✅ What's Been Completed
 
-### 🐳 Docker Configuration
-- **Dockerfile**: Multi-stage build optimized for production
-  - Node.js 20 Alpine base image
-  - Non-root user security
-  - Proper signal handling with dumb-init
-  - Optimized build process
-- **docker-compose.yml**: Updated for full-stack local development
-- **.dockerignore**: Properly configured to exclude unnecessary files
-- **Container tested**: ✅ Successfully builds and starts
+### � Direct Deployment Configuration
+- **server.mjs**: Production server with graceful shutdown, health checks, and monitoring
+- **start.sh**: Automated startup script with environment validation
+- **PM2 ready**: Process manager configuration for production
+- **systemd ready**: Service configuration for Linux servers
 
 ### 🗄️ Database Integration
 - **TypeORM**: Configured with PostgreSQL
@@ -38,10 +34,11 @@
 - **CI Ready**: Tests can run in any environment
 
 ### 📦 Production Deployment
-- **Sevalla.com Ready**: Complete deployment guide created
+- **Direct Deployment**: Complete guide for VPS/cloud deployment
 - **Environment Variables**: Properly documented
-- **Health Checks**: Built-in health endpoint
-- **Security**: Non-root user, proper secrets management
+- **Health Checks**: Built-in health monitoring endpoint
+- **Security**: Non-root user execution, proper secrets management
+- **Process Management**: PM2 and systemd configurations
 
 ## 🚀 Quick Start Commands
 
@@ -61,6 +58,7 @@ npm run start:dev
 npm test
 ```
 
+<<<<<<< HEAD
 ### Docker Development:
 ```bash
 # Using docker-compose (includes PostgreSQL)
@@ -78,6 +76,33 @@ docker build -t warung-telegram-bot .
 
 # Deploy to Sevalla.com
 # Follow DEPLOYMENT.md guide
+=======
+### Production Deployment:
+```bash
+# Build the application
+npm run build
+
+# Start with production server
+npm run start:server
+
+# Check health status
+npm run health
+
+# Start with startup script
+./start.sh
+```
+
+### Process Management:
+```bash
+# Using PM2
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup
+
+# Using systemd
+sudo systemctl start warung-telegram
+sudo systemctl enable warung-telegram
+>>>>>>> b826ffe (try remove docker)
 ```
 
 ## 📁 Project Structure
@@ -161,8 +186,16 @@ warung_telegram/
 
 ---
 
+<<<<<<< HEAD
 **Status**: 🟢 PRODUCTION READY
 **Last Updated**: $(date)
 **Container Status**: ✅ Successfully building and starting
 **Tests**: ✅ 17/17 passing
 **Deployment**: ✅ Ready for Sevalla.com
+=======
+**Status**: 🟢 PRODUCTION READY (Docker-Free)
+**Last Updated**: August 14, 2025
+**Deployment Type**: ✅ Direct VPS/Cloud Deployment
+**Tests**: ✅ 17/17 passing
+**Server**: ✅ Production server working perfectly
+>>>>>>> b826ffe (try remove docker)
